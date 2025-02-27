@@ -1,0 +1,563 @@
+<!-- inequality dashboard frontend 1 -->
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<title>Predicting media sentiment</title>
+	<!-- libraries -->
+	<script src="https://ajax.googleapis.com/ajax/libs/jquery/1.11.3/jquery.min.js"></script>
+	<script src="https://cdnjs.cloudflare.com/ajax/libs/snap.svg/0.5.1/snap.svg-min.js"></script>
+	<script src="https://cdnjs.cloudflare.com/ajax/libs/jquery-csv/1.0.21/jquery.csv.min.js"></script>
+	
+	<!-- fonts -->
+	<script src="https://kit.fontawesome.com/8e22f64061.js" crossorigin="anonymous"></script>
+	<link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/font-awesome/4.5.0/css/font-awesome.min.css">
+	<link rel="preconnect" href="https://fonts.googleapis.com">
+	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+	<link href="https://fonts.googleapis.com/css2?family=Rubik:ital,wght@0,300..900;1,300..900&display=swap" rel="stylesheet">
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<style>
+		body {font-family:Arial,Helvetica;margin-bottom:100px;margin-top:50px}
+		svg{display:inline;position:relative}
+		h3{font-weight:600;margin-bottom:0px}
+		h4{font-weight:500;margin-top:5px}
+		h1{margin-bottom:5px}
+		.text_container {width:100%;max-width:600px;text-align:left;font-family:Rubik;font-weight:400;font-size:100%;line-height:1.3;margin:auto}
+		.svg_container {width:100%;max-width:700px;margin:auto;margin-top:30px;margin-bottom:30px}
+		.inline_svgs{display:inline-block;width:100%;position:relative}
+		.tooltip{font-size:80%;z-index:200;font-weight:200;text-align:left;padding:6px 8px 6px 8px;border-radius:2px;top:-9999px;background:rgba(0,0,0,.8);border:1px solid white;color:white;font-family:'Rubik';position: fixed;max-width:280px;}
+		.keyholder{font-size:70%;line-height:190%;max-width:700px;margin:auto;margin-bottom:35px;margin-top:30px}
+		.observed_tone{background-color:#006ba6}
+		.predicted_tone{background-color:#f6511d}
+		.keylabel{display:inline;vertical-align:middle;line-height:1;margin-right:15px}
+		.keylabelholder{display:inline;white-space:nowrap}
+		.keyline{height:2px;width:20px;display:inline-block;vertical-align:middle;text-align:center;margin-right:5px}
+		.keybox{height:15px;width:15px;display:inline-block;vertical-align:middle;text-align:center;margin-right:5px}
+		.ttip_keyholder{vertical-align:middle;margin-left:10px;margin-top:5px;line-height:140%}
+		.ttip_keylabel{display:inline;vertical-align:middle}
+		.ttip_keyline{height:2px;width:10px;vertical-align:middle;display:inline-block}
+		.ttip_keybox{height:10px;width:10px;border:1px solid white;vertical-align:middle;display:inline-block}
+		.recessions{background:#ddd}
+		.positive_resid{background:#ffb400}
+		.negative_resid{background:#CE0A1A}
+		@media screen and (max-width:700){
+			.tooltip{max-width:160px}
+		}
+	</style>
+</head>
+<div class='tooltip' id='tooltip'>Hi, I'm the tooltip</div>
+<body>
+
+	<div class='text_container'>
+		<h1>Tracking how media's tone on the economy compares to economic fundamentals</h1>
+		<h4>A replication of <a href="https://www.brookings.edu/articles/why-are-americans-so-displeased-with-the-economy/">Ben Harris and Aaron Sojourner</a> with automatic quarterly updating</h4>
+
+		<p>During the U.S. economic recovery from the COVID-19 induced economic recession, many observers noted that metrics of consumer sentiment showed that consumers held very negative feelings about the economy despite strong metrics for unemployment and real GDP growth. This negative consumer sentiment persisted even when inflation moderated and economists found that sentiment was negative compared to prior periods where the economy was performing similarly.</p>
+
+		<p>Several mechanisms for this disconnect were proposed. One mechanism, proposed by <a href="https://www.brookings.edu/articles/why-are-americans-so-displeased-with-the-economy/">Ben Harris and Aaron Sojourner of Brookings</a>, is the negative tone of media coverage of the economy. Harris and Sojourner found that when controlling for economic fundamentals, media's coverage of the economy became more negative in 2017 and remained negative through 2023.</p>
+
+		<p>This page replicates the Harris and Sojourner analysis and extends it to more recent quarters. This page will update quarterly once GDP growth data is available from the Bureau of Economic Analysis. There are two charts on this page. The first, below, shows the entire data series. After looking at different hold-out periods to test their model out-of-sample, Harris and Sojourner settled on 2017 as a cut point for the model. The data suggests that from 2017 onwards, there was a shift in how journalists reported on the economy, with coverage starting to skew more negatively. I adopt the same model they use. Data before 2017 is used to train an ARIMA model to predict media tone based on year-over-year changes in the stock market, inflation, GDP growth, and the current unemployment level. Observed media tone and predictions from the model are shown below.</p>
+	</div>
+
+	<div class='svg_container'>
+		<h3>Media tone over time vs. predictions of media tone based on economic fundamentals</h3>
+		<h4>Standard deviations above or below average, U.S. recessions are shaded</h4>
+		<div class='inline_svgs' id='insample_holder'>
+			<svg viewBox='0 0 700 300' xmlns="http://www.w3.org/2000/svg" id='insample'></svg>
+		</div>
+	</div>
+
+	<div class='keyholder'>
+		<div class='keylabelholder'><div class='keyline observed_tone'></div><div class='keylabel'>Observed media tone</div></div>
+		<div class='keylabelholder'><div class='keyline predicted_tone'></div><div class='keylabel'>Predicted media tone</div></div>
+		<div class='keylabelholder'><div class='keybox recessions'></div><div class='keylabel'>U.S. recession</div></div>
+	</div>
+
+	<div class='text_container'>
+		<p>The second chart, below, looks more closely at the out-of-sample data from 2017 onwards. The last quarter included in Harris and Sojourner's analysis was Q4 of 2023. I update their analysis and show that media's tone on the economy has remained more negative than what the 1988-2017 training set predicts. This graph shows only the difference between actual tone and predicted tone. Yellow bars indicate quarters where reporting on the economy was more positive than the model predicted, and red bars indicate quarters where reporting was more negative.</p>
+	</div>
+
+	<div class='svg_container'>
+		<h3 class='text'>Media tone vs. predicted media tone, 2017 onwards</h3>
+		<h4>Difference between observed media tone and media tone predicted from economic fundamentals, U.S. recessions are shaded</h4>
+		<div class='inline_svgs' id='oos_holder'>
+			<svg viewBox='0 0 700 300' xmlns="http://www.w3.org/2000/svg" id='oos'></svg>
+		</div>
+	</div>
+
+	<div class='keyholder'>
+		<div class='keylabelholder'><div class='keybox positive_resid'></div><div class='keylabel'>Media tone is more positive than fundamentals</div></div>
+		<div class='keylabelholder'><div class='keybox negative_resid'></div><div class='keylabel'>Media tone is less positive than fundamentals</div></div>
+		<div class='keylabelholder'><div class='keybox recessions'></div><div class='keylabel'>U.S. recession</div></div>
+	</div>
+
+	<div id='intro' class='text_container'>
+		<p>You can find my code for this project, which replicates Harris and Sojourner's analysis in Python, on my github. Harris and Sojourner's original Stata analysis is <a href="https://github.com/aaronsojourner/EconNewsTone">available on Sojourner's github</a>.</p>
+	</div>
+
+</body>
+
+<script>
+	// globals
+	var oos = Snap('#oos')
+	var insample = Snap('#insample')
+
+	// some colors
+	var point_colors=['#006ba6','#f6511d']
+	var bar_colors=['#ffb400','#CE0A1A']
+
+	// stuff to do once the doc loads
+	$(document).ready(function() {
+		// handlers for hovering over the graph
+		oos.hover(highlight_element,unhighlight_element)
+		insample.hover(highlight_element,unhighlight_element)
+
+		oos.touchstart(highlight_element)
+		oos.touchmove(highlight_element)
+		oos.touchend(unhighlight_element)
+		insample.touchstart(highlight_element)
+		// insample.touchmove(highlight_element)
+		insample.touchend(unhighlight_element)
+
+		get_resids_data()
+	})
+
+	function highlight_element(ev) {
+		// handle hovering over data to see values
+		event.preventDefault()
+		item=Snap(ev.target)
+		if(item.attr('class')=='hoveron'){
+			// handlers for all graphs
+			item.attr({'fill-opacity':.3})
+
+			// handlers for specific graphs
+			// in sample
+			if(item.attr('graph')=='insample'){
+				var quart_dict={1:'1st',2:'2nd',3:'3rd',4:'4th'}
+				var compare='from'
+				var comparep='from'
+				var tone=item.attr('tone')
+				var predicted_tone=item.attr('predicted_tone')
+				if(tone<0){compare='below'}
+				if(tone>0){compare='above'}
+				if(predicted_tone<0){comparep='below'}
+				if(predicted_tone>0){comparep='above'}
+				var diff=tone-predicted_tone
+				var difference='the same as'
+				if(diff<0){difference="more negative than"}
+				if(diff>0){difference="more positive than"}
+
+				html_string='In the '+quart_dict[item.attr('quarter')]+' quarter of '+item.attr('year')+" media tone was "+difference+" tone predicted by economic fundamentals.<br><div class='ttip_keyholder'><div class='ttip_keyline observed_tone'> </div> Media tone was "+item.attr('tone')+" SD "+compare+ " average<br><div class='ttip_keyline predicted_tone'> </div> Predicted tone was "+item.attr('predicted_tone')+" SD "+comparep+" average<br></div>"
+				$('#tooltip').html(html_string)
+
+				// update location of tooltip
+				item.mousemove(function(ev){
+					var x=ev.clientX
+					var y=ev.clientY
+					var edge=$(window).width()
+					var bottom=$(window).height()
+					if (x+300>edge){
+						$('#tooltip').css('left',x-304)
+					} else {
+						$('#tooltip').css('left',x+10)		
+					}
+					if (y+$('#tooltip').height()>bottom) {
+						$('#tooltip').css('top',bottom-$('#tooltip').height()-20)
+					} else {
+						$('#tooltip').css('top',y)
+					}
+				})
+			}
+
+			// handlers for specific graphs
+			// oos
+			if(item.attr('graph')=='oos'){
+				var quart_dict={1:'1st',2:'2nd',3:'3rd',4:'4th'}
+				var resid=item.attr('residual')
+				if(resid>0){
+					var compare="more positive than"
+					var box='positive_resid'
+				} else {
+					var compare="more negative than"
+					var box='negative_resid'
+				}
+				html_string='In the '+quart_dict[item.attr('quarter')]+' quarter of '+item.attr('year')+" media tone was:<br> <div class='ttip_keyholder'><div class='ttip_keybox "+box+"'> </div> "+resid+" "+compare+" what the economic fundamentals would suggest."
+				$('#tooltip').html(html_string)
+
+				// update location of tooltip
+				item.mousemove(function(ev){
+					var x=ev.clientX
+					var y=ev.clientY
+					var edge=$(window).width()
+					var bottom=$(window).height()
+					if (x+300>edge){
+						$('#tooltip').css('left',x-304)
+					} else {
+						$('#tooltip').css('left',x+10)		
+					}
+					if (y+$('#tooltip').height()>bottom) {
+						$('#tooltip').css('top',bottom-$('#tooltip').height()-20)
+					} else {
+						$('#tooltip').css('top',y)
+					}
+				})
+			}
+		}
+	}
+
+	function unhighlight_element(ev) {
+		item=Snap(ev.target)
+		if(item.attr('class')=='hoveron'){
+			item.attr({'fill-opacity':0})
+			$('#tooltip').css('top',-99999)
+		}
+	}
+
+	// retrieve data for residuals graph
+	function get_resids_data(callback) {
+		$.ajax({
+			url:'DATA/forecast_data.csv',
+			type: 'get',
+			datatype: 'html',
+			success: function(response){
+				loadresponse=$.csv.toArrays(response)
+				draw_allyears(loadresponse)
+				draw_oosyears(loadresponse)
+			}
+		})
+	}
+
+	// draw income top graph
+	function draw_allyears(data) {
+		// margins
+		var top_margin=20
+		var bottom_margin=3
+		var left_margin=20
+		var right_margin=0
+
+		var width_text=$('#insample_holder').width()
+		var height_text=$('#insample_holder').height()
+		var width=700
+		var height=300
+		var width_ratio=width_text/width
+		var height_ratio=height_text/height
+
+		// create a list of y and x values to send to the create axis functions
+		var yaxis_values=[]
+		var xaxis_values=[]
+
+		// iterate through data, skip header row
+		for (var i=1;i<data.length;i++){
+			// combine the year and quarter columns to make one x-value
+			var yq=parseInt(data[i][0])+.25*(parseInt(data[i][1])-1)
+			xaxis_values.push(yq)
+			data[i].push(yq)
+
+			// push both z-sentiment, yhat, and residuals to the y-values EDIT: maybe we're not doing the residuals on this graph
+			yaxis_values.push(parseFloat(data[i][2]))
+			yaxis_values.push(parseFloat(data[i][8]))
+			// yaxis_values.push(parseFloat(data[i][9]))
+		}
+
+		// adding/subtracting 0.25 from xmax/xmin allows for the width of the first and last bar
+		var xmin=Math.min(...xaxis_values)-0.5
+		var xmax=Math.max(...xaxis_values)+0.5
+		var ymin=Math.min(...yaxis_values)
+		var ymax=Math.max(...yaxis_values)
+
+		// get axes
+		xaxis=create_xaxis(xaxis_values)
+		yaxis=create_yaxis(yaxis_values)
+
+		// if axis ticks are higher/lower than mins/maxes, change mins and maxes
+		if(Math.max(...yaxis)>ymax){ymax=Math.max(...yaxis)}
+		if(Math.min(...yaxis)<ymin){ymin=Math.min(...yaxis)}
+		if(Math.max(...xaxis)>xmax){xmax=Math.max(...xaxis)}
+		if(Math.min(...xaxis)<xmin){xmin=Math.min(...xaxis)}
+
+		// coordinates for mins and maxes
+		var xmin_coord=get_coord(xmin,left_margin,width-right_margin,xmin,xmax,0)
+		var xmax_coord=get_coord(xmax,left_margin,width-right_margin,xmin,xmax,0)
+		var ymin_coord=get_coord(ymin,top_margin,height-bottom_margin,ymin,ymax,1)
+		var ymax_coord=get_coord(ymax,top_margin,height-bottom_margin,ymin,ymax,1)
+
+
+		// shade recessions
+		var recessions=[[1990.5,1991+(2/12)],[2001+(2/12),2001+(10/12)],[2007+(11/12),2009+(5/12)],[2020+(1/12),2020+(3/12)]]
+		for (var i=0;i<recessions.length;i++){
+			var start_coord=get_coord(recessions[i][0],left_margin,width-right_margin,xmin,xmax,0).toFixed(1)
+			var end_coord=get_coord(recessions[i][1],left_margin,width-right_margin,xmin,xmax,0).toFixed(1)
+			insample.rect(start_coord,ymax_coord,end_coord-start_coord,ymin_coord-ymax_coord).attr({fill:'#ddd'})
+		}
+
+		// x-ticks and labels
+		// label only values in axis, but draw all whole number x-ticks
+		for (var i=Math.round(xmin);i<=xmax;i++) {
+			var xcoord=get_coord(i,left_margin,width-right_margin,xmin,xmax,0)
+			insample.line(xcoord,ymin_coord+3,xcoord,ymin_coord).attr({strokeWidth:1,stroke:'#777'})
+			if (xaxis.includes(i)) {
+				var label=$('<div>',{css:{'line-height':1,color:'black',display:'block',position:'absolute',left:width_ratio*xcoord,top:height_ratio*(ymin_coord+8),transform:'translate(-50%)','font-size':'80%'}})
+				label.addClass('tlabel')
+				label.html(i)
+				$("#insample_holder").append(label)
+			}
+		}
+
+		// y-lines/axes
+		for (var i=0;i<yaxis.length;i++) {
+			var yval=yaxis[i]
+			var ycoord=get_coord(yval,top_margin,height-bottom_margin,ymin,ymax,1)
+			if (yval==0){
+				insample.line(xmin_coord,ycoord,xmax_coord,ycoord).attr({strokeWidth:2,stroke:'#000'})
+			} else {
+				insample.line(xmin_coord,ycoord,xmax_coord,ycoord).attr({strokeWidth:1,stroke:'#bbb'})
+			}
+			var label=$('<div>',{css:{'line-height':1,color:'#bbb',display:'block',position:'absolute',left:width_ratio*(xmin_coord-6),top:height_ratio*ycoord,transform:'translate(-100%,-50%)','font-size':'80%'}})
+			label.addClass('tlabel')
+			label.html(yval)
+			$("#insample_holder").append(label)
+		}
+
+		// create line paths, skip header row
+		var tone_path='M'
+		var predict_path='M'
+		for (var i=1;i<data.length;i++){
+			var current_row=data[i]
+			var current_x=current_row[10]
+			var tone=parseFloat(data[i][2])
+			var predicted_tone=parseFloat(data[i][8])
+
+			var x_coord=get_coord(current_x,left_margin,width-right_margin,xmin,xmax,0).toFixed(1)
+			var tone_coord=get_coord(tone,top_margin,height-bottom_margin,ymin,ymax,1).toFixed(1)
+			var predict_coord=get_coord(predicted_tone,top_margin,height-bottom_margin,ymin,ymax,1).toFixed(1)
+
+			tone_path=tone_path+x_coord+','+tone_coord+'L'
+			predict_path=predict_path+x_coord+','+predict_coord+'L'
+
+			// draw interaction bar
+			var bar_height=height-top_margin-bottom_margin
+			var bar_width=get_coord(0.25,left_margin,width-right_margin,xmin,xmax,0)-get_coord(0,left_margin,width-right_margin,xmin,xmax,0)
+			var bar_upperleft_x=x_coord-(bar_width/2)
+			var bar_upperleft_y=top_margin
+			insample.rect(bar_upperleft_x,bar_upperleft_y,bar_width,bar_height).attr({fill:'black','fill-opacity':0,class:'hoveron',quarter:parseInt(data[i][1]),year:parseInt(data[i][0]),graph:'insample',predicted_tone:predicted_tone.toFixed(2),tone:tone.toFixed(2),gdp:parseFloat(data[i][5]),unemp:parseFloat(data[i][3]),inflation:parseFloat(data[i][6]),stocks:parseFloat(data[i][7])})
+		}
+		// draw out of sample divider
+		var div_coord=get_coord(2017,left_margin,width-right_margin,xmin,xmax,0)
+		insample.line(div_coord,ymin_coord,div_coord,ymax_coord).attr({stroke:'black','stroke-width':2,'pointer-events':'none','stroke-dasharray':8,stroke:'#777'})
+		var label=$('<div>',{css:{'line-height':1,color:'#777',display:'block',position:'absolute',left:width_ratio*div_coord,top:height_ratio*(ymax_coord-2),transform:'translate(-50%,-100%)','font-size':'80%'}})
+		label.html('End of in-sample data')
+		$("#insample_holder").append(label)
+
+		// draw paths
+		tone_path=tone_path.slice(0,-1)
+		insample.path(tone_path).attr({stroke:point_colors[0],'stroke-width':2,'fill-opacity':0,'pointer-events':'none',opacity:1})
+		predict_path=predict_path.slice(0,-1)
+		insample.path(predict_path).attr({stroke:point_colors[1],'stroke-width':2,'fill-opacity':0,'pointer-events':'none',opacity:1})
+	}
+
+	function draw_oosyears(data) {
+		// margins
+		var top_margin=20
+		var bottom_margin=3
+		var left_margin=20
+		var right_margin=0
+
+		var width_text=$('#oos_holder').width()
+		var height_text=$('#oos_holder').height()
+		var width=700
+		var height=300
+		var width_ratio=width_text/width
+		var height_ratio=height_text/height
+
+		// truncate data to 2017 forward
+		var trunc_data=[]
+		for (var i=0;i<data.length;i++){
+			if(parseInt(data[i][0])>2016){
+				trunc_data.push(data[i])
+			}
+		}
+		var data=trunc_data
+
+		// create a list of y and x values to send to the create axis functions
+		var yaxis_values=[]
+		var xaxis_values=[]
+
+		// iterate through data
+		for (var i=0;i<data.length;i++){
+			// combine the year and quarter columns to make one x-value
+			var yq=parseInt(data[i][0])+.25*(parseInt(data[i][1])-1)
+			xaxis_values.push(yq)
+			data[i].push(yq)
+
+			// push residuals to the y-values
+			yaxis_values.push(parseFloat(data[i][9]))
+		}
+
+		// adding/subtracting 0.25 from xmax/xmin allows for the width of the first and last bar
+		var xmin=Math.min(...xaxis_values)-0.5
+		var xmax=Math.max(...xaxis_values)+0.5
+		var ymin=Math.min(...yaxis_values)
+		var ymax=Math.max(...yaxis_values)
+
+		// get axes
+		xaxis=create_xaxis(xaxis_values)
+		yaxis=create_yaxis(yaxis_values)
+
+		// if axis ticks are higher/lower than mins/maxes, change mins and maxes
+		if(Math.max(...yaxis)>ymax){ymax=Math.max(...yaxis)}
+		if(Math.min(...yaxis)<ymin){ymin=Math.min(...yaxis)}
+		if(Math.max(...xaxis)>xmax){xmax=Math.max(...xaxis)}
+		if(Math.min(...xaxis)<xmin){xmin=Math.min(...xaxis)}
+
+		// coordinates for mins and maxes
+		var xmin_coord=get_coord(xmin,left_margin,width-right_margin,xmin,xmax,0)
+		var xmax_coord=get_coord(xmax,left_margin,width-right_margin,xmin,xmax,0)
+		var ymin_coord=get_coord(ymin,top_margin,height-bottom_margin,ymin,ymax,1)
+		var ymax_coord=get_coord(ymax,top_margin,height-bottom_margin,ymin,ymax,1)
+
+		// shade recessions
+		var recessions=[[1990.5,1991+(2/12)],[2001+(2/12),2001+(10/12)],[2007+(11/12),2009+(5/12)],[2020+(1/12),2020+(3/12)]]
+		for (var i=0;i<recessions.length;i++){
+			var start_coord=get_coord(recessions[i][0],left_margin,width-right_margin,xmin,xmax,0).toFixed(1)
+			var end_coord=get_coord(recessions[i][1],left_margin,width-right_margin,xmin,xmax,0).toFixed(1)
+			oos.rect(start_coord,ymax_coord,end_coord-start_coord,ymin_coord-ymax_coord).attr({fill:'#ddd'})
+		}
+
+		// x-ticks and labels
+		// label only values in axis, but draw all whole number x-ticks
+		for (var i=Math.round(xmin);i<=xmax;i++) {
+			var xcoord=get_coord(i,left_margin,width-right_margin,xmin,xmax,0)
+			oos.line(xcoord,ymin_coord+3,xcoord,ymin_coord).attr({strokeWidth:1,stroke:'#777'})
+			if (xaxis.includes(i)) {
+				var label=$('<div>',{css:{'line-height':1,color:'black',display:'block',position:'absolute',left:width_ratio*xcoord,top:height_ratio*(ymin_coord+8),transform:'translate(-50%)','font-size':'80%'}})
+				label.addClass('tlabel')
+				label.html(i)
+				$("#oos_holder").append(label)
+			}
+		}
+
+		// y-lines/axes
+		for (var i=0;i<yaxis.length;i++) {
+			var yval=yaxis[i]
+			var ycoord=get_coord(yval,top_margin,height-bottom_margin,ymin,ymax,1)
+			if (yval==0){
+				oos.line(xmin_coord,ycoord,xmax_coord,ycoord).attr({strokeWidth:2,stroke:'#000'})
+			} else {
+				oos.line(xmin_coord,ycoord,xmax_coord,ycoord).attr({strokeWidth:1,stroke:'#bbb'})
+			}
+			var label=$('<div>',{css:{'line-height':1,color:'#bbb',display:'block',position:'absolute',left:width_ratio*(xmin_coord-6),top:height_ratio*ycoord,transform:'translate(-100%,-50%)','font-size':'80%'}})
+			label.addClass('tlabel')
+			label.html(yval)
+			$("#oos_holder").append(label)
+		}
+
+		// draw residual bars
+		for (var i=0;i<data.length;i++){
+			var current_row=data[i]
+			var current_x=current_row[10]
+			var resid=parseFloat(data[i][9])
+
+			var x_coord=get_coord(current_x,left_margin,width-right_margin,xmin,xmax,0).toFixed(1)
+			var resid_coord=get_coord(resid,top_margin,height-bottom_margin,ymin,ymax,1).toFixed(1)
+
+			var bar_width=get_coord(0.25,left_margin,width-right_margin,xmin,xmax,0)-get_coord(0,left_margin,width-right_margin,xmin,xmax,0)
+			var bar_upperleft_x=(x_coord-(bar_width/2))+1
+			var bar_height=Math.abs(resid_coord-get_coord(0,top_margin,height-bottom_margin,ymin,ymax,1).toFixed(1))
+
+			if(resid>0){
+				oos.rect(bar_upperleft_x+1,resid_coord,bar_width-2,bar_height-1).attr({fill:bar_colors[0],'fill-opacity':.7})
+			} else {
+				oos.rect(bar_upperleft_x+1,get_coord(0,top_margin,height-bottom_margin,ymin,ymax,1)+1,bar_width-2,bar_height-1).attr({fill:bar_colors[1],'fill-opacity':.7})
+			}
+
+			// draw interaction bar
+			var bar_height=height-top_margin-bottom_margin
+			var bar_upperleft_y=top_margin
+			var predicted_tone=parseFloat(current_row[8])
+			var tone=parseFloat(current_row[2])
+			oos.rect(bar_upperleft_x,bar_upperleft_y,bar_width,bar_height).attr({fill:'black','fill-opacity':0,class:'hoveron',quarter:parseInt(data[i][1]),year:parseInt(data[i][0]),graph:'oos',predicted_tone:predicted_tone.toFixed(2),tone:tone.toFixed(2),gdp:parseFloat(data[i][5]),unemp:parseFloat(data[i][3]),inflation:parseFloat(data[i][6]),stocks:parseFloat(data[i][7]),residual:resid.toFixed(2)})
+		}
+	}
+
+	// create an x axis (years) based on data values
+	function create_xaxis(values) {
+		// change this to whatever # of labels looks nice on the graph
+		var preferred_label=10
+		var interval=Math.ceil((values.length/4)/preferred_label)
+		var axis=[Math.round(Math.max(...values))]
+		while (axis[axis.length-1]-interval>=Math.min(...values)){
+			axis.push(axis[axis.length-1]-interval)
+		}
+		axis.sort((a, b) => (a - b))
+		return axis
+	}
+
+	// create a y axis based on data values
+	function create_yaxis(values) {
+		var max=Math.max(...values)
+		var min=Math.min(...values)
+		if(max-min>14){
+			var interval=3
+		} else if (max-min>7){
+			var interval=2
+		} else {
+			var interval=1
+		}
+
+		var tens_max=Math.floor(max)
+		if (max-tens_max>=(interval/2)){
+			tens_max=tens_max+interval
+		}
+
+		var tens_min=Math.floor(min)
+
+		var axis=[tens_max]
+		while (axis[axis.length-1]-interval>=tens_min){
+			axis.push(axis[axis.length-1]-interval)
+		}
+		axis.sort((a, b) => (a - b))
+		return axis
+	}
+
+	// get a coordinate for any graph
+	// y is a dummy where 0=x and 1=y
+	function get_coord(value,pixel_min,pixel_max,value_min,value_max,y){
+		var pixel_range=pixel_max-pixel_min
+		var value_range=value_max-value_min
+		var ratio=((value-value_min)/value_range)*pixel_range
+		
+		// y_coord
+		if (y==1){
+			return pixel_range-ratio+pixel_min
+		}
+
+		// x_coord
+		if (y==0){
+			return ratio+pixel_min
+		}
+	}
+
+	var test_data=[['year', 'quarter', 'z_sentiment', 'unemployment', 'dpi', 'ppchg_gdp', 'ppchg_cpi', 'ppchg_stock_close', 'yhat', 'residuals'], ['1988.0', '1.0', '-0.013266360949794187', '5.7', '3.9', '7.437619595794809', '3.965116279069769', '-8.893436925290743', '0.14052269165244327', '-0.15378905260223746'], ['1988.0', '2.0', '0.18071263823708347', '5.5', '6.2', '7.9871664696972156', '3.979941096871764', '-12.15257313810877', '0.10041840744846672', '0.08029423078861675'], ['1988.0', '3.0', '0.45407186680938466', '5.5', '5.4', '8.153864579270786', '4.142053261221523', '-19.10345535957575', '0.05519684343975524', '0.39887502336962943'], ['1988.0', '4.0', '-0.03659952229096959', '5.3', '4.8', '7.817800899921212', '4.3066598458377126', '5.217180933247101', '0.7002669890752964', '-0.736866511366266'], ['1989.0', '1.0', '0.4884372908883972', '5.2', '4.3', '8.630965756108555', '4.675092271557979', '14.041001610428495', '0.3504216919609998', '0.1380155989273974'], ['1989.0', '2.0', '0.052203905864962145', '5.2', '2.7', '8.139192098089488', '5.1596111153640045', '18.872273254894', '0.7023470201238092', '-0.6501431142588471'], ['1989.0', '3.0', '0.035488411715462034', '5.2', '2.4', '7.808875348179534', '4.705882352941182', '27.49040178150002', '0.29383125307781766', '-0.25834284136235564'], ['1989.0', '4.0', '0.1965016471937092', '5.4', '2.3', '6.439992969731145', '4.627597672485462', '26.115764836579313', '0.08721206686911598', '0.10928958032459321'], ['1990.0', '1.0', '0.23578189248088885', '5.3', '2.0', '6.558363406651813', '5.232314432015239', '17.319722924127245', '0.027972985713387633', '0.20780890676750122'], ['1990.0', '2.0', '0.001785069997231357', '5.3', '3.1', '6.192735702667451', '4.583727645531543', '15.227860089642187', '0.15881820319234735', '-0.157033133195116'], ['1990.0', '3.0', '-0.8532736067243497', '5.7', '2.4', '5.614231923678292', '5.564205457463878', '2.9494497685687016', '-0.36770972123831336', '-0.48556388548603635'], ['1990.0', '4.0', '-1.369577521907289', '6.1', '0.7', '4.480344207138143', '6.276466428849492', '-5.973157796328121', '-0.9778734008283316', '-0.39170412107895736'], ['1991.0', '1.0', '-1.590192363595992', '6.6', '0.3', '2.766648600022381', '5.259581514140899', '4.330884479774055', '-1.086452801193174', '-0.503739562402818'], ['1991.0', '2.0', '-0.6229968903051277', '6.8', '0.3', '2.7992150372447844', '4.846867749419959', '4.982200719134511', '-1.353411398489786', '0.7304145081846583'], ['1991.0', '3.0', '-0.24796963146475545', '6.9', '0.6', '3.1723577733164143', '3.852265211011696', '9.954272804209086', '-0.5058652410074186', '0.2578956095426631'], ['1991.0', '4.0', '-0.626199795355211', '7.1', '2.2', '4.3267036186288355', '2.964856803247451', '18.309826230264715', '-0.15965091626464045', '-0.4665488790905705'], ['1992.0', '1.0', '0.2042037359318719', '7.4', '3.9', '5.433543136590169', '2.893883517478324', '16.563592925140803', '-0.21500975859160593', '0.41921349452347784'], ['1992.0', '2.0', '0.04117530077680826', '7.6', '4.1', '5.613003850910947', '3.073019245096509', '13.456621716665062', '0.2582679728746603', '-0.21709267209785205'], ['1992.0', '3.0', '-0.15698414337912034', '7.6', '4.1', '5.812240762353849', '3.0746705710102518', '10.431856579614983', '-0.17861989736495784', '0.021635753985837503'], ['1992.0', '4.0', '0.2627286183071584', '7.4', '3.8', '6.644749654404003', '3.1219823862109974', '8.626151873498177', '0.03661447985059784', '0.22611413845656053'], ['1993.0', '1.0', '1.2092344178825305', '7.1', '2.2', '5.757522038779195', '3.1730692955065143', '3.7723401378770838', '0.046936053508584666', '1.1622983643739457'], ['1993.0', '2.0', '0.6086580270490793', '7.1', '1.6', '5.2262152083146995', '3.125246004880733', '4.107155357727432', '0.6181106512012943', '-0.009452624152214928'], ['1993.0', '3.0', '0.7561546118784135', '6.8', '1.2', '4.803932482375695', '2.817471590909082', '7.936072746004119', '0.45027583260047155', '0.30587877927794194'], ['1993.0', '4.0', '1.694038926664183', '6.6', '1.5', '4.9834578268510565', '2.7697788542099477', '13.41152255077116', '1.013133627505501', '0.6809052991586821'], ['1994.0', '1.0', '1.4800578298248874', '6.6', '1.7', '5.7388417107526735', '2.539369665960689', '14.713838379391175', '1.390728024904027', '0.0893298049208604'], ['1994.0', '2.0', '0.7154256655339117', '6.2', '2.4', '6.432602788775155', '2.3823733518389956', '6.6755095536126685', '1.1113255602236711', '-0.3958998946897594'], ['1994.0', '3.0', '1.1101895501260632', '6.0', '3.0', '6.523839096740547', '2.8549324086290406', '6.344860487178194', '0.7873627332916371', '0.32282681683442616'], ['1994.0', '4.0', '1.1136667710808426', '5.6', '3.7', '6.295501770952949', '2.6033281495132288', '3.4694780757158705', '1.0241460968593281', '0.08952067422151444'], ['1995.0', '1.0', '0.4200145854128604', '5.5', '3.9', '5.714683629834627', '2.8404907975460025', '2.7352532889753256', '0.6100876073123607', '-0.19007302189950026'], ['1995.0', '2.0', '0.025403746440575244', '5.7', '3.2', '4.609758254908192', '3.09557861630958', '18.368793365403626', '0.4534820989478963', '-0.42807835250732107'], ['1995.0', '3.0', '0.622161632819267', '5.7', '3.5', '4.802160665386723', '2.6642041638683667', '23.363740285972455', '0.4199877552269948', '0.20217387759227218'], ['1995.0', '4.0', '0.7863815608994833', '5.6', '2.6', '4.256012644984342', '2.6260791763205393', '29.601061989504828', '0.6580396376579559', '0.12834192324152738'], ['1996.0', '1.0', '0.27288556590869967', '5.5', '2.7', '4.602043340796924', '2.7839090059456506', '36.93356841111084', '0.7418748759347414', '-0.4689893100260418'], ['1996.0', '2.0', '0.516742592033382', '5.5', '3.3', '5.96020549803673', '2.827087442472065', '28.215610963205016', '0.47943400398249936', '0.03730858805088266'], ['1996.0', '3.0', '0.8143398373218945', '5.3', '3.2', '5.8346441064020205', '2.8999064546305187', '20.684391765477272', '0.6457636831394067', '0.16857615418248784'], ['1996.0', '4.0', '1.4954191625942266', '5.3', '3.2', '6.267991116470117', '3.2316200390370975', '26.386019137639405', '0.7707939847877351', '0.7246251778064915'], ['1997.0', '1.0', '1.6369049667125704', '5.2', '3.1', '6.2805999846475835', '2.9445336531950694', '25.864776240277276', '1.2489219694287925', '0.38798299728377783'], ['1997.0', '2.0', '1.3774953210524623', '5.0', '3.1', '6.0499773430069625', '2.3017902813299296', '27.33469916577651', '1.5273299092669224', '-0.14983458821446005'], ['1997.0', '3.0', '1.9774970749962184', '4.9', '3.5', '6.535338037397698', '2.2250476795931284', '40.27600782879179', '1.791046974735444', '0.18645010026077435'], ['1997.0', '4.0', '1.1742128215177368', '4.7', '4.5', '6.127724364271092', '1.8907523303522522', '25.435108875232658', '1.7596785782482667', '-0.5854657567305299'], ['1998.0', '1.0', '1.0963066548626665', '4.6', '5.8', '6.024701485353612', '1.4827761177200083', '21.322063810266755', '1.1360543501709455', '-0.03974769530827893'], ['1998.0', '2.0', '0.7198432927071626', '4.4', '6.3', '5.292678274292517', '1.5831249999999963', '25.633807461443013', '1.196703800521062', '-0.4768605078138993'], ['1998.0', '3.0', '-0.07541337191402327', '4.5', '6.1', '5.290123092668519', '1.5963930348258604', '7.163041971017803', '0.38572561773143443', '-0.4611389896454577'], ['1998.0', '4.0', '-0.09466748684852484', '4.4', '5.4', '6.024293892235', '1.525357679674899', '11.399464626516043', '0.3991594894358339', '-0.49382697628435873'], ['1999.0', '1.0', '1.2859689703654906', '4.3', '4.3', '6.1490241899829545', '1.6870370370370313', '14.452130864475098', '0.3045767034325281', '0.9813922669329626'], ['1999.0', '2.0', '1.0690603007053492', '4.3', '2.9', '6.204344203746404', '2.112801707960865', '18.582377301341936', '1.0935947476068393', '-0.024534446901490092'], ['1999.0', '3.0', '0.916474734999928', '4.2', '2.6', '6.200230081973701', '2.3462510788592628', '28.179773722745182', '1.006892346756924', '-0.09041761175699592'], ['1999.0', '4.0', '0.964965663377024', '4.1', '3.2', '6.5222572305051685', '2.6198266040345253', '24.118299356849214', '1.2640573557770944', '-0.2990916924000704'], ['2000.0', '1.0', '1.498394523155868', '4.0', '3.9', '6.274085758528591', '3.2579993079710823', '13.3031186030369', '0.947353393903493', '0.5510411292523749'], ['2000.0', '2.0', '1.2157908426129482', '3.9', '5.0', '7.57394598691401', '3.293425801514749', '0.24602041557471033', '1.2288703262308363', '-0.013079483617888021'], ['2000.0', '3.0', '1.4910790499614477', '4.0', '5.7', '6.519700461233868', '3.4688995215311103', '-0.11985368620808234', '0.7710068569637284', '0.7200721929977193'], ['2000.0', '4.0', '1.1151491007360328', '3.9', '5.0', '5.409756136486155', '3.443505726312557', '-2.2286783000208366', '1.1890026804856766', '-0.0738535797496438'], ['2001.0', '1.0', '0.6009638315284155', '4.2', '4.0', '4.679500336876585', '3.4097589653145244', '-2.3968830498683924', '0.7748607675573502', '-0.17389693602893475'], ['2001.0', '2.0', '0.7177359357283913', '4.4', '2.7', '3.4278844464915137', '3.3249141063856014', '-0.09229551859856189', '0.5725697024238168', '0.14516623330457457'], ['2001.0', '3.0', '-0.0696087428052137', '4.8', '3.7', '2.712255522178597', '2.678034682080921', '-7.812108268297669', '0.38260557703513753', '-0.4522143198403512'], ['2001.0', '4.0', '-1.3822648511135738', '5.5', '1.3', '2.1533778521205527', '1.8750753301613354', '-9.077966208892319', '-0.3107974734810485', '-1.0714673776325252'], ['2002.0', '1.0', '-0.5088326238876676', '5.7', '2.9', '2.991997024707471', '1.231949971574764', '-3.731025143048594', '-0.6580111374843877', '0.14917851359672007'], ['2002.0', '2.0', '-0.4813930916812922', '5.8', '3.8', '2.721577507312012', '1.31765396622876', '-7.071217168480281', '-0.4584333744771134', '-0.022959717204178776'], ['2002.0', '3.0', '-0.7662151060338803', '5.7', '1.6', '3.642378482018338', '1.5762836860268026', '-15.339147492618432', '-0.7490230634306219', '-0.01719204260325846'], ['2002.0', '4.0', '-0.5837492675058137', '5.9', '4.0', '3.7612618211307014', '2.2535211267605604', '-12.852819445140206', '-0.6927875278341862', '0.1090382603283725'], ['2003.0', '1.0', '-0.6320069228877062', '5.9', '1.6', '3.6224695136087615', '2.9764077566309277', '-19.55510589638957', '-0.6152536420882688', '-0.016753280799437387'], ['2003.0', '2.0', '-0.5777812379765573', '6.1', '1.9', '3.9063840418242624', '2.0059398106615722', '-12.5058467451587', '-0.3096772607720901', '-0.2681039772044672'], ['2003.0', '3.0', '0.5386472804702906', '6.1', '3.5', '5.304323363716801', '2.2168893716781213', '9.535681810814456', '0.13922270571930084', '0.3994245747509898'], ['2003.0', '4.0', '1.3510980418492524', '5.8', '3.2', '6.425939568589345', '2.001652892561978', '17.559722706111856', '0.8969898034437653', '0.4541082384054871'], ['2004.0', '1.0', '1.1650448639233604', '5.7', '3.6', '6.705829152321385', '1.8176662103868146', '28.894640245852642', '1.3054080673545412', '-0.1403632034311808'], ['2004.0', '2.0', '1.5393067344910476', '5.6', '3.5', '7.072090061793923', '2.7858652842948084', '18.513650050710375', '0.9122445749080154', '0.6270621595830322'], ['2004.0', '3.0', '1.3223186434251544', '5.4', '2.4', '6.38591802013182', '2.6752262339169164', '8.811725757679811', '1.277746516905054', '0.04457212652010045'], ['2004.0', '4.0', '1.238173702200151', '5.4', '3.3', '6.413226240660852', '3.3851339307416906', '5.162948646205812', '0.8533775188096431', '0.38479618339050803'], ['2005.0', '1.0', '1.7955294671466793', '5.3', '1.5', '7.077139689554546', '3.035350830208894', '1.6195756946569162', '1.1739297351659124', '0.6215997319807669'], ['2005.0', '2.0', '1.1603440946510468', '5.1', '1.4', '6.685819935332948', '2.9229354775279326', '0.8902952588387247', '1.39803295280183', '-0.23768885815078322'], ['2005.0', '3.0', '1.3215456713438862', '5.0', '1.1', '6.804665661734388', '3.81956729525208', '4.107542954015675', '0.9451548898710465', '0.3763907814728398'], ['2005.0', '4.0', '1.286975879782698', '5.0', '0.8', '6.362069012311911', '3.6745036572622736', '2.3987093124677283', '1.1875602268058247', '0.09941565297687327'], ['2006.0', '1.0', '1.831853475587973', '4.7', '4.1', '6.515668247738793', '3.6908617382399367', '3.3364849900020754', '1.054345612605347', '0.777507862982626'], ['2006.0', '2.0', '1.4986978857301492', '4.6', '3.5', '6.428771299027081', '3.924261748258595', '7.729961512245231', '1.4594471749896942', '0.03925071074045494'], ['2006.0', '3.0', '1.062155981559368', '4.6', '3.3', '5.5357667050506265', '3.34028484231943', '6.916627964913258', '1.1459684684874611', '-0.08381248692809318'], ['2006.0', '4.0', '1.381129611892983', '4.4', '3.6', '5.368846048889675', '1.9653989003845185', '14.628505248944101', '1.4686492846980732', '-0.08751967280509021'], ['2007.0', '1.0', '1.3969312799772906', '4.5', '2.5', '4.533302056891753', '2.4314798939172766', '13.25088660363165', '1.104704861810781', '0.2922264181665095'], ['2007.0', '2.0', '0.6364887165013507', '4.5', '2.6', '4.716338273291076', '2.6651164870545196', '18.217817573172045', '1.178234161238863', '-0.5417454447375122'], ['2007.0', '3.0', '-0.1313199879835272', '4.7', '2.7', '5.003025193313881', '2.3488066467487245', '19.585386460867028', '0.6693751317377297', '-0.8006951197212568'], ['2007.0', '4.0', '-0.5027610212370924', '4.8', '1.6', '4.811390100544477', '4.03147286898331', '11.079062620270829', '-0.10653421370787325', '-0.3962268075292192'], ['2008.0', '1.0', '-1.210361821945391', '5.0', '1.2', '3.453144706492872', '4.137198568890499', '-0.6043659310561833', '-0.6696123685121764', '-0.5407494534332147'], ['2008.0', '2.0', '-1.4631044700805766', '5.3', '2.8', '3.2191109590960387', '4.310582632809212', '-5.396868883950567', '-1.2801477381534607', '-0.18295673192711592'], ['2008.0', '3.0', '-1.9076643988082302', '6.0', '0.6', '2.299363565947732', '5.2525019356638225', '-16.016335745126533', '-1.8111932873080208', '-0.09647111150020948'], ['2008.0', '4.0', '-2.429872327549493', '6.9', '1.7', '-0.7261201416943086', '1.595800275547532', '-34.82193472736558', '-2.114331051865234', '-0.31554127568425905'], ['2009.0', '1.0', '-2.069883000849855', '8.3', '1.2', '-1.8742412388286112', '-0.18423649950651821', '-37.36860142547318', '-2.419410312115131', '0.3495273112652759'], ['2009.0', '2.0', '-1.7486409014077773', '9.3', '-0.2', '-3.2589448691319634', '-0.9422932383152838', '-33.41074801124907', '-2.168413183666944', '0.41977228225916674'], ['2009.0', '3.0', '-1.3781838141424887', '9.6', '0.5', '-3.021122425741485', '-1.6069560131773075', '-18.556760883427405', '-1.6034786835176014', '0.22529486937511267'], ['2009.0', '4.0', '-0.08865655383748407', '9.9', '-0.5', '0.2946288624430249', '1.487498187973757', '15.44845881825676', '-0.9342716475899198', '0.8456150937524357'], ['2010.0', '1.0', '-0.3715962773806102', '9.8', '0.2', '2.3124542041793372', '2.3524093832694604', '34.94928360733907', '0.19648265847891266', '-0.5680789358595228'], ['2010.0', '2.0', '-1.0937273480360312', '9.6', '1.2', '4.16485064287937', '1.7751174434561756', '26.81823108786814', '-0.188925596735429', '-0.9048017513006023'], ['2010.0', '3.0', '-0.9711448309885954', '9.5', '3.0', '4.794315574035424', '1.202726799910847', '12.66935303358332', '-0.6066617637791389', '-0.36448306720945645'], ['2010.0', '4.0', '-0.6581102775902814', '9.5', '3.2', '4.492620390247959', '1.2297839008432065', '10.505597678710021', '-0.871808494335554', '0.21369821674527256'], ['2011.0', '1.0', '-0.3553281644138737', '9.0', '3.6', '3.9746258113150246', '2.1483710103324283', '14.859516788077464', '-0.944768509675002', '0.5894403452611283'], ['2011.0', '2.0', '-1.0165469871498005', '9.1', '1.7', '3.854062494388444', '3.3461115431874466', '17.039498375915805', '-0.8328884427698201', '-0.18365854437998042'], ['2011.0', '3.0', '-2.099963577990141', '9.0', '1.7', '3.3422674356823556', '3.716262721741437', '12.107653497664138', '-1.0707120439560411', '-1.0292515340340997'], ['2011.0', '4.0', '-1.3983158897789092', '8.6', '1.6', '3.480099969469874', '3.3445759880563752', '4.973918652313181', '-1.3507924886705232', '-0.04752340110838604'], ['2012.0', '1.0', '-0.6900119632103511', '8.3', '2.1', '4.6728947002263155', '2.8291689935328046', '6.842861530523359', '-0.7412900316340221', '0.051278068423671'], ['2012.0', '2.0', '-0.8001770257641768', '8.2', '3.0', '4.17531333201222', '1.8880695379573043', '3.1968123876542576', '-0.9101793320216511', '0.11000230625747431'], ['2012.0', '3.0', '-0.9842379695546918', '8.0', '1.6', '4.29367804045071', '1.6847097547703305', '12.585883356849493', '-0.5567276277089002', '-0.4275103418457916'], ['2012.0', '4.0', '-0.11028930735515036', '7.8', '4.2', '3.6494795344527597', '1.903570626346096', '11.371758458802205', '-0.7255704163946675', '0.6152811090395172'], ['2013.0', '1.0', '-0.41887526365876593', '7.7', '-1.4', '3.605644601449809', '1.7400558850065417', '8.92703359757132', '-0.06959322637319548', '-0.34928203728557045'], ['2013.0', '2.0', '0.044060787735408294', '7.5', '-1.3', '3.2181668359853255', '1.414723261424422', '17.22706634147839', '-0.2998699383624211', '0.3439307260978294'], ['2013.0', '3.0', '0.2567224461534682', '7.2', '-0.2', '3.886733088877925', '1.5049534243237739', '16.56395054934128', '0.29853438544744515', '-0.041811939293976974'], ['2013.0', '4.0', '-0.5242114889384454', '6.9', '-2.8', '4.6990274730504655', '1.2075947944625298', '19.7504910274056', '0.44783287380738535', '-0.9720443627458307'], ['2014.0', '1.0', '0.47171166631800965', '6.7', '2.4', '3.3009536352572866', '1.4300535086246624', '15.597430156887903', '-0.371860451275962', '0.8435721175939717'], ['2014.0', '2.0', '0.21455800789929297', '6.2', '2.9', '4.721356792675957', '2.080199961214424', '10.99374928810446', '0.60159589095652', '-0.38703788305722703'], ['2014.0', '3.0', '0.2001116387552744', '6.1', '3.5', '5.015914390594034', '1.7908272610372977', '10.917292193663508', '-0.010032530877171097', '0.2101441696324455'], ['2014.0', '4.0', '0.6904908319227845', '5.7', '4.9', '4.188338786735879', '1.1637192895546988', '10.22611843551533', '0.5023224261283199', '0.1881684057944646'], ['2015.0', '1.0', '0.8666702275556386', '5.5', '5.1', '5.034330677673982', '-0.11289316317306675', '10.08264743872569', '0.9711905102164407', '-0.10452028266080204'], ['2015.0', '2.0', '0.5391175476697909', '5.4', '4.1', '4.34555271487731', '0.037150866290658335', '8.437032439366066', '0.7274840616363057', '-0.18836651396651483'], ['2015.0', '3.0', '0.1659960283460091', '5.1', '3.7', '3.355371544332053', '0.15875154751177067', '0.722717667702355', '0.5099546268577754', '-0.34395859851176624'], ['2015.0', '4.0', '0.3783851472731667', '5.0', '2.8', '2.920141207505833', '0.40061125932928654', '0.7532438045534606', '0.24306328887657533', '0.13532185839659136'], ['2016.0', '1.0', '-0.08003590011521657', '4.9', '2.3', '2.5598763120982637', '0.9916933993329158', '-6.431097629994453', '0.13109704072930928', '-0.21113294084452583'], ['2016.0', '2.0', '0.04575591518490562', '4.9', '1.7', '2.362817853865229', '1.1098919648885763', '-1.336545019317481', '-0.047906813627953404', '0.09366272881285903'], ['2016.0', '3.0', '0.358355031488743', '4.9', '1.8', '2.6683131153736106', '1.1570074204872771', '7.585681396447774', '0.33972772623408076', '0.01862730525466222'], ['2016.0', '4.0', '1.0478513316218354', '4.8', '1.8', '3.5488860212972817', '1.8071200023545453', '7.950139366033593', '0.4169814694008608', '0.6308698622209746'], ['2017.0', '1.0', '1.6348632425080138', '4.6', '2.1', '4.070785530747623', '2.5874146468704895', '22.460788641387364', '0.7884592745038714', '0.8464039680041424'], ['2017.0', '2.0', '0.8857543376254541', '4.4', '3.4', '3.884953918141698', '1.8907299970783331', '18.183740970762653', '1.4170515638584198', '-0.5312972262329657'], ['2017.0', '3.0', '0.4222338052338952', '4.3', '3.5', '4.234220534251465', '1.9450805670657934', '19.1507020337931', '0.9973439610397865', '-0.5751101558058913'], ['2017.0', '4.0', '1.193956480862976', '4.2', '3.5', '4.964587899899731', '2.1075020133396682', '25.573936340750603', '1.0140323039138188', '0.17992417694915708'], ['2018.0', '1.0', '0.9414011530980892', '4.0', '3.5', '5.438093526978416', '2.248614864726317', '23.138276194271334', '1.1826852728346335', '-0.2412841197365443'], ['2018.0', '2.0', '-0.10513458066988829', '3.9', '3.3', '5.876279532475603', '2.686793380304775', '16.967204848183837', '0.6892365473782844', '-0.7943711280481727'], ['2018.0', '3.0', '-0.38765201018070855', '3.8', '3.7', '5.617009845579002', '2.608780734405003', '16.91924602165935', '0.34730465893293583', '-0.7349566691136444'], ['2018.0', '4.0', '0.10237620106545257', '3.8', '4.0', '4.395743533192031', '2.213656476755199', '5.315588407998062', '-0.09970480715087215', '0.20208100821632474'], ['2019.0', '1.0', '-0.08482270560302753', '3.9', '4.2', '3.851956408309043', '1.6300206159103547', '0.08053710663809', '0.062493562846708484', '-0.147316268449736'], ['2019.0', '2.0', '-0.0747981670589791', '3.6', '3.2', '3.9698240777668037', '1.8222507669170662', '6.270111984264792', '0.07096224933671424', '-0.14576041639569334'], ['2019.0', '3.0', '-1.0415833741873841', '3.6', '2.8', '4.4158513524623855', '1.749402032691516', '4.224514356936893', '0.3173230350707037', '-1.3589064092580878'], ['2019.0', '4.0', '-0.3996633426836639', '3.6', '2.3', '4.853984395254085', '2.0485851427124224', '10.377241242402446', '-0.16173932207465191', '-0.23792402060901197'], ['2020.0', '1.0', '-0.5808954306009624', '3.8', '1.7', '2.9180971598552485', '2.1437648488866756', '5.595186126662566', '-0.20740817708196213', '-0.37348725351900025'], ['2020.0', '2.0', '-3.646118887443505', '13.0', '11.9', '-6.834742674738092', '0.40940735836267894', '-5.842884598111054', '-4.232854470660966', '0.586735583217461'], ['2020.0', '3.0', '-2.2623822712899875', '8.8', '7.2', '-0.15020372589044095', '1.2234028013698328', '2.336566534055917', '-1.6187401678411368', '-0.6436421034488506'], ['2020.0', '4.0', '-1.0185705069493094', '6.8', '4.5', '0.6180123964487194', '1.2423998014642113', '5.643881575085619', '-1.2319795470430606', '0.21340904009375117'], ['2021.0', '1.0', '-0.20174793120353546', '6.2', '16.3', '4.276282527839981', '1.880858363792326', '18.81452603182394', '0.19236408946484954', '-0.394112020668385'], ['2021.0', '2.0', '0.5103334667514849', '5.9', '-2.4', '17.22267635473782', '4.794531237806887', '38.869866640871045', '1.537057538218764', '-1.026724071467279'], ['2021.0', '3.0', '0.09325546053868573', '5.1', '0.0', '10.318129252480258', '5.271157540640847', '27.900519793421495', '0.18386533326861798', '-0.09060987272993225'], ['2021.0', '4.0', '-0.2294297974605501', '4.2', '1.0', '12.271963358895398', '6.75126009222804', '22.087215066123612', '0.6617600839978587', '-0.8911898814584087'], ['2022.0', '1.0', '-0.5150912968448028', '3.8', '-12.5', '11.293292921023724', '8.024316801043675', '9.917090059679268', '-0.40592586949251597', '-0.10916542735228685'], ['2022.0', '2.0', '-0.6130990848486761', '3.6', '-5.5', '10.428107728485347', '8.58999180877207', '-4.201410605247702', '-0.4513238112933199', '-0.16177527355535626'], ['2022.0', '3.0', '-0.8772921182485699', '3.5', '-2.9', '9.823680645979671', '8.289908606524321', '-8.996324253222387', '-0.49629109279328093', '-0.38100102545528897'], ['2022.0', '4.0', '-1.0027762120190615', '3.6', '-0.8', '7.899406700671796', '7.096394576616594', '-8.522126069028491', '-0.5846196452908963', '-0.41815656672816526'], ['2023.0', '1.0', '-0.6312051616055855', '3.5', '4.8', '7.728852077478865', '5.738910635608829', '-4.212362123212332', '-0.21092572825069833', '-0.42027943335488716'], ['2023.0', '2.0', '-1.7352334559424496', '3.5', '6.1', '6.386256480183072', '4.036673969916094', '2.9220144031911532', '-0.031731300996895806', '-1.7035021549455538'], ['2023.0', '3.0', '-0.301560471646587', '3.7', '4.8', '6.454344130717682', '3.564708908049874', '9.111043597096803', '-0.7766157138254667', '0.4750552421788797'], ['2023.0', '4.0', '0.08088738940152972', '3.8', '4.6', '5.845267481892269', '3.236202587622028', '7.518388589809533', '0.055894140287604865', '0.02499324911392485'], ['2024.0', '1.0', '0.6597267027788344', '3.8', '3.4', '5.373622105347664', '3.2477622247602866', '15.951216142580972', '-0.08526876103222614', '0.7449954638110605'], ['2024.0', '2.0', '0.3933780478511669', '4.0', '2.8', '5.692829940028377', '3.1876186458553057', '15.349420228676092', '0.7010566490124182', '-0.30767860116125123'], ['2024.0', '3.0', '0.30267492676203184', '4.2', '2.7', '5.031579825825494', '2.6600924056175312', '17.11258039544441', '0.6628494101648876', '-0.3601744834028558'], ['2024.0', '4.0', '1.0071159460562644', '4.1', '2.6', '4.960294861283199', '2.7197087208509885', '23.829382837731284', '0.9240543814453217', '0.08306156461094272']]
+
+	draw_allyears(test_data)
+	draw_oosyears(test_data)
+
+</script>
+</html>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
